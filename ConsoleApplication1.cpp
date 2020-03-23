@@ -11,7 +11,10 @@ typedef double dd;
 
 
 vector<vector<int>> pole; // Игровое поле - то, где всё происходит
-int y = 30, x = 15, n = 2, sitnost = 5; // границы поля, количество точек, заспавненных изначально, сытность каждого кусочка еды
+int y = 30, x = 25, n = 2, sitnost = 5; // границы поля, количество точек, заспавненных изначально, сытность каждого кусочка еды
+int newChildConsumtion = 16;		// стоимость создания нового ребёнка
+dd stamina = 0.8;					// минимальное количество энергии, нужное для создания нового ребёнка
+int timeBeforeNextChild = 5;		// минимальное количество времени перед рождением следующего
 
 int randNapr() { //задаёт случайное направление для движения живой точки
 	int t = rand() % 3;	
@@ -35,6 +38,13 @@ int newNpr(int food_coordinate, int alivePoint_coordinate) {	//Выдаёт но
 }
 
 set<Point> food;	// сет для хранения точек, где есть еда
+template<class T>
+void makeChild(T a, int maxLifeTime_, int genNumber_, int maxspeed_) {		//функция созидания. Делает новых детей
+	pair<int, int> coordinates = (a).getCoordinates();						
+	T e(coordinates.first, coordinates.second, 1, 1, maxLifeTime_, genNumber_ + 1, maxspeed_);
+	addToPoints(&e);			//создаёт ребенка следующего поколения на месте старого
+}
+
 
 class AlivePoint {		// класс живых точек
 private:
@@ -44,18 +54,20 @@ private:
 	int napr_x, napr_y; // направление двжения точки по каждой координате
 	int maxspeed = 1; // максимальная скорость по обеим координатам
 	int consumtion = 1; // потребление ЕДЫ за 1 ход. Понимаю, что жестоко, но нужно же как-то ограничивать скорость клеток
+	int generationNumber = 0;		// номер поколения, которому принадлежит клетка
+	int lifenessTime = 0;			// время, которое клетка прожила с рождения последнего ребёнка
 
-	void setOnPole() {	//метод, чтобы установить точку на поле
+	void setOnPole() {	//метод, чтобы установить точку на поле и дать ей номер, соответствующий поколению
 
-		pole[x_p][y_p] = 1;
+		pole[x_p][y_p] = generationNumber;
 	}
 	void runFromPole() {
-		pole[x_p][this->y_p] = 0;	//метод, чтобы убрать точку с поля
+		pole[x_p][this->y_p] = -1;	//метод, чтобы убрать точку с поля
 	}
 
 
 public:
-	AlivePoint(int x_coordinate, int y_coordinate, int speed_x_, int speed_y_, int maxlifetime_) { //конструктор
+	AlivePoint(int x_coordinate, int y_coordinate, int speed_x_, int speed_y_, int maxlifetime_, int generationNumber_, int maxspeed_ = 1) { //конструктор
 		this->x_p = x_coordinate;
 		this->y_p = y_coordinate;
 		this->speed_x = speed_x_;
@@ -65,6 +77,7 @@ public:
 		setOnPole();
 		this->napr_x = randNapr();
 		this->napr_y = randNapr();
+		this->generationNumber = generationNumber_;
 	};
 	int getLifeTime() {		//сколько клетке осталось жить
 		return maxLifeTime - lifeTime;
@@ -73,8 +86,10 @@ public:
 		runFromPole();
 		x_p = -10e5;
 	}
+	
 	int newHode() {		//метод, чтобы клетка сделала новый ход
-		if (getLifeTime() == 1) {		// если клетка умерла бы на этом ходе, то на просто умирает
+		lifenessTime++;
+		if (getLifeTime() <= consumtion) {		// если клетка умерла бы на этом ходе, то на просто умирает
 			runFromPole();
 			return 1;
 		}
@@ -85,16 +100,24 @@ public:
 			y_p += napr_y * speed_y;
 			x_p = (x_p + x) % x;
 			y_p = (y_p + y) % y;
-			if (pole[x_p][y_p] == 2) {		//если клетка напоролась на ЕДУ, то она её ест
+			if (pole[x_p][y_p] == -2) {		//если клетка напоролась на ЕДУ, то она её ест
 				lifeTime -= sitnost;		//продлевает себе жизнь
-				maxspeed = max(getLifeTime() / 5, 1);
-				speed_x = maxspeed;
-				speed_y = maxspeed;
 				Point e;
 				e.x_f = x_p;
 				e.y_f = y_p;
 				food.erase(food.find(e));		//и убирает ЕДУ с поля
 			}
+			if (lifenessTime >= timeBeforeNextChild && newChildConsumtion <= (int)getLifeTime() * stamina) { //если прошло много времени и 
+				lifenessTime = 0;								// клетка уже встала на ноги и может родить 
+				AlivePoint e = *this;							//реализовано кошмарно. Она копируется, потом изначальной увеличивается
+				e.plusLifeTime(newChildConsumtion);				// прожитое время
+				makeChild(*this, maxLifeTime, generationNumber, maxspeed); //потом она делает ребёнка
+				*this = e; //и снова возвращается в прежнее тело
+				// не знаю, почему это нормально не работает, но как есть
+			}
+			maxspeed = max(getLifeTime() / 10, 1);
+			speed_x = maxspeed;
+			speed_y = maxspeed;
 			setOnPole();
 			return 0;
 		}
@@ -130,17 +153,34 @@ public:
 			napr_y = newNpr(minp.y_f, y_p);
 		}
 	}
+	void plusLifeTime(int time) {
+		lifeTime += time;
+	}
+	pair<int, int> getCoordinates() {
+		return make_pair(x_p, y_p);
+	}
 protected:
 	//Надо бы, наверное, что-то допилить, когда-нибудь будет, честно
 };
-
 vector<AlivePoint> points;			//массив клеток. Каюсь, не придумал, как их засунуть во что-нибудь типо сета или подобного
 									// из-за этого умершие клетки всё равно остаются "живыми", просто очень далеко за картой
+
+void addToPoints(AlivePoint* b) {	// функция, которая запихивает новую клетку в массив ахахаха
+	points.push_back(*b);
+}
+
 
 void poleSet() {					//инициализация стартового игрового поля размерами х на у
 	for (int i = 0; i < x; i++) {
 		vector<int> e(y);
 		pole.push_back(e);
+	}
+	for (int i = 0; i < x; i++)
+	{
+		for (int j = 0; j < y; j++)
+		{
+			pole[i][j] = -1;
+		}
 	}
 }
 
@@ -155,12 +195,12 @@ void polePrint() {					//функция для вывода поля в конс
 		cout << setw(3) << j;						//циферки слева
 		for (int i = 0; i < y; i++)
 		{
-			if (pole[j][i] == 0)					//если 0 - значит там ничего нет
+			if (pole[j][i] == -1)					//если -1 - значит там ничего нет
 				cout << setw(3) << " ";
-			if (pole[j][i] == 1)					//1 - значит там живая клетка
-				cout << setw(3) << "@";
-			if (pole[j][i] == 2)					//2 - значит там ЕДА
+			if (pole[j][i] == -2)					//-2 - значит там ЕДА
 				cout << setw(3) << "+";
+			if (pole[j][i] >= 0)					// какой-то опознавательный знак для клетки
+				cout << setw(3) << pole[j][i];
 		}
 		cout << endl;
 	}
@@ -174,7 +214,7 @@ void newFood() {			//функция для созидания
 	e.x_f = rand() % x;
 	e.y_f = rand() % y;
 	food.insert(e);			
-	pole[e.x_f][e.y_f] = 2;		//создаёт новую ЕДУ в случайном месте карты
+	pole[e.x_f][e.y_f] = -2;		//создаёт новую ЕДУ в случайном месте карты
 }
 
 
@@ -194,7 +234,7 @@ int main()
 {
 	srand((int)time(0));
 	poleSet();
-	AlivePoint e(rand() % x, rand() % y, 1, 1, 25);		//просто набор новых клеток
+	AlivePoint e(rand() % x, rand() % y, 1, 1, 25, 0);		//просто набор новых клеток
 	//AlivePoint p(rand() % x, rand() % y, 1, 1, 15);
 	//return e < p;
 	/*for (int i = 0; i < n; i++)
@@ -215,11 +255,15 @@ int main()
 	int k = 0, t = 0;
 	while (k < 100)				//делает картинку 100 раз
 	{
-		cin >> k;
+		//cin >> k;
+		k++;
 		if (t++ % 10 == 0) {		//каждый 10 ход добавляет куссочек ЕДЫ
 			newFood();
 		}
 		newShag();
-		polePrint();
+		if (k % 10 == 0) {
+			polePrint();
+			cout << k;
+		}
 	}
 }
