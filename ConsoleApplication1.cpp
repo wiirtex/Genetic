@@ -11,7 +11,7 @@ typedef double dd;
 
 
 vector<vector<int>> pole; // Игровое поле - то, где всё происходит
-int y = 30, x = 15, n = 2, sitnost = 10; // границы поля, количество точек, заспавненных изначально, сытность каждого кусочка еды
+int y = 30, x = 15, n = 2, sitnost = 5; // границы поля, количество точек, заспавненных изначально, сытность каждого кусочка еды
 
 int randNapr() { //задаёт случайное направление для движения живой точки
 	int t = rand() % 3;	
@@ -39,10 +39,11 @@ set<Point> food;	// сет для хранения точек, где есть �
 class AlivePoint {		// класс живых точек
 private:
 	int x_p, y_p;		//координаты живой точки
-	int speed;			// пока что скорость живой точки
+	int speed_x, speed_y;			// пока что скорость живой точки по разным координатам разная
 	int lifeTime, maxLifeTime;	//сколько прожила точка и сколько ей осталось
 	int napr_x, napr_y; // направление двжения точки по каждой координате
-
+	int maxspeed = 1; // максимальная скорость по обеим координатам
+	int consumtion = 1; // потребление ЕДЫ за 1 ход. Понимаю, что жестоко, но нужно же как-то ограничивать скорость клеток
 
 	void setOnPole() {	//метод, чтобы установить точку на поле
 
@@ -54,10 +55,11 @@ private:
 
 
 public:
-	AlivePoint(int x_coordinate, int y_coordinate, int speed_, int maxlifetime_) { //конструктор
+	AlivePoint(int x_coordinate, int y_coordinate, int speed_x_, int speed_y_, int maxlifetime_) { //конструктор
 		this->x_p = x_coordinate;
 		this->y_p = y_coordinate;
-		this->speed = speed_;
+		this->speed_x = speed_x_;
+		this->speed_y = speed_y_;
 		this->maxLifeTime = maxlifetime_;
 		this->lifeTime = 0;
 		setOnPole();
@@ -78,13 +80,16 @@ public:
 		}
 		else {
 			runFromPole();
-			lifeTime++;
-			x_p += napr_x;
-			y_p += napr_y;
+			lifeTime += consumtion;
+			x_p += napr_x * speed_x;
+			y_p += napr_y * speed_y;
 			x_p = (x_p + x) % x;
 			y_p = (y_p + y) % y;
 			if (pole[x_p][y_p] == 2) {		//если клетка напоролась на ЕДУ, то она её ест
 				lifeTime -= sitnost;		//продлевает себе жизнь
+				maxspeed = max(getLifeTime() / 5, 1);
+				speed_x = maxspeed;
+				speed_y = maxspeed;
 				Point e;
 				e.x_f = x_p;
 				e.y_f = y_p;
@@ -116,6 +121,11 @@ public:
 			napr_y = randNapr();
 		}
 		else {						//или же устремляемся к ЕДЕ
+			if (abs(minp.x_f - x_p) < speed_x)
+				speed_x = min(max(1, abs(minp.x_f - x_p)), maxspeed);
+			if (abs(minp.y_f - y_p) < speed_y)
+				speed_y = min(max(1, abs(minp.y_f - y_p)), maxspeed);
+			consumtion = (max(speed_x, speed_y) + 1) / 2;
 			napr_x = newNpr(minp.x_f, x_p);
 			napr_y = newNpr(minp.y_f, y_p);
 		}
@@ -135,6 +145,7 @@ void poleSet() {					//инициализация стартового игро�
 }
 
 void polePrint() {					//функция для вывода поля в консоль. Работает некрасиво, лучше научиться каким-нибдуь движкам, но пофиг
+	cout << "   ";
 	for (int i = 0; i < y; i++)
 	{
 		cout << setfill(' ') << setw(3) << i;		//циферки сверху
@@ -183,8 +194,8 @@ int main()
 {
 	srand((int)time(0));
 	poleSet();
-	AlivePoint e(rand() % x, rand() % y, 1, 15);		//просто набор новых клеток
-	AlivePoint p(rand() % x, rand() % y, 1, 15);
+	AlivePoint e(rand() % x, rand() % y, 1, 1, 25);		//просто набор новых клеток
+	//AlivePoint p(rand() % x, rand() % y, 1, 1, 15);
 	//return e < p;
 	/*for (int i = 0; i < n; i++)
 	{
@@ -200,17 +211,15 @@ int main()
 	newFood();
 	newFood();
 	points.push_back(e);
-	points.push_back(p);
+	//points.push_back(p);
 	int k = 0, t = 0;
 	while (k < 100)				//делает картинку 100 раз
 	{
-		k++;
+		cin >> k;
 		if (t++ % 10 == 0) {		//каждый 10 ход добавляет куссочек ЕДЫ
 			newFood();
 		}
 		newShag();
 		polePrint();
-		Sleep(250);
-
 	}
 }
